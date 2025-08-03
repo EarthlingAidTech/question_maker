@@ -192,12 +192,18 @@ class ProcessorTab(BaseTab):
         
         try:
             # Insert questions
+# Insert questions
             count = self.app.db_manager.insert_questions(self.processed_questions, self.app.username)
+            
+            # Update user's question count
+            if hasattr(self.app, 'user_manager') and self.app.user_manager.collection:
+                self.app.user_manager.update_questions_created(self.app.username, count)
             
             messagebox.showinfo(
                 "Success", 
                 f"Successfully saved {count} questions to database!"
             )
+
             
             # Clear inputs
             self.json_input.delete(1.0, tk.END)

@@ -629,6 +629,7 @@ class EditQuestionDialog:
         self.dialog.after(100, lambda: safe_grab_set(self.dialog))
         
         self.setup_ui()
+        self.populate_fields()  # Add this line to populate fields after setup
     
     def setup_ui(self):
         """Setup edit dialog UI"""
@@ -662,22 +663,9 @@ class EditQuestionDialog:
         # Classification
         self.add_form_field(form_frame, 2, "Classification:", 'classification', 'combobox')
         
-        # Update topics and classifications based on subject
-        def update_combos():
-            subject = self.widgets['subject'].get()
-            if subject:
-                topics = self.app.config_manager.get_topics_for_subject(subject)
-                self.widgets['topic']['values'] = topics
-                
-                classifications = self.app.config_manager.get_classifications_for_subject(subject)
-                self.widgets['classification']['values'] = classifications
-        
-        update_combos()
-        self.widgets['subject'].bind('<<ComboboxSelected>>', lambda e: update_combos())
-        
         # Level
         self.add_form_field(form_frame, 3, "Level:", 'level', 'combobox',
-                           values=self.app.config_manager.levels, readonly=True)
+                           values=self.app.config_manager.levels, state='readonly')
         
         # Marks
         self.add_form_field(form_frame, 4, "Marks:", 'marks', 'entry')
@@ -690,25 +678,7 @@ class EditQuestionDialog:
             self.add_form_field(form_frame, 5+i, f"Option {i}:", f'option{i}', 'entry')
         
         # Correct Answer
-        self.add_form_field(form_frame, 10, "Correct Answer:", 'correctAnswer', 'combobox')
-        self.update_correct_answer_options()
-        
-        # Dynamic update for correct answer dropdown
-        def update_correct_answer_options(*args):
-            current_correct = self.widgets['correctAnswer'].get()
-            options = [
-                self.widgets['option1'].get(),
-                self.widgets['option2'].get(),
-                self.widgets['option3'].get(),
-                self.widgets['option4'].get()
-            ]
-            self.widgets['correctAnswer']['values'] = options
-            if current_correct in options:
-                self.widgets['correctAnswer'].set(current_correct)
-        
-        # Bind option changes
-        for i in range(1, 5):
-            self.widgets[f'option{i}'].bind('<KeyRelease>', update_correct_answer_options)
+        self.add_form_field(form_frame, 10, "Correct Answer:", 'correctAnswer', 'combobox', state='readonly')
         
         # Created by (readonly)
         tk.Label(
@@ -767,25 +737,110 @@ class EditQuestionDialog:
         
         if widget_type == 'entry':
             widget = tk.Entry(parent, font=('Arial', 11), width=50)
-            widget.insert(0, self.question.get(field_name, ''))
         elif widget_type == 'combobox':
             widget = ttk.Combobox(parent, font=('Arial', 11), width=47, **kwargs)
-            widget.set(self.question.get(field_name, ''))
         elif widget_type == 'text':
             widget = tk.Text(parent, font=('Arial', 11), width=50, height=kwargs.get('height', 4), wrap=tk.WORD)
-            widget.insert(1.0, self.question.get(field_name, ''))
         
         widget.grid(row=row, column=1, padx=10, pady=5, sticky='w')
         self.widgets[field_name] = widget
     
+    def populate_fields(self):
+        """Populate all fields with question data"""
+        # Debug print to see what data we have
+        print(f"Populating fields with question data: {self.question}")
+        
+        # Populate subject and update dependent dropdowns
+        subject = self.question.get('subject', '')
+        if subject:
+            self.widgets['subject'].set(subject)
+            
+            # Update topics dropdown
+            topics = self.app.config_manager.get_topics_for_subject(subject)
+            self.widgets['topic']['values'] = topics
+            
+            # Update classifications dropdown
+            classifications = self.app.config_manager.get_classifications_for_subject(subject)
+            self.widgets['classification']['values'] = classifications
+        
+        # Populate topic
+        topic = self.question.get('topic', '')
+        if topic:
+            self.widgets['topic'].set(topic)
+        
+        # Populate classification
+        classification = self.question.get('classification', '')
+        if classification:
+            self.widgets['classification'].set(classification)
+        
+        # Populate level
+        level = self.question.get('level', '')
+        if level:
+            self.widgets['level'].set(level)
+        
+        # Populate marks
+        marks = str(self.question.get('marks', '1'))
+        self.widgets['marks'].insert(0, marks)
+        
+        # Populate question text
+        question_text = self.question.get('question', '')
+        self.widgets['question'].insert(1.0, question_text)
+        
+        # Populate options
+        for i in range(1, 5):
+            option_value = self.question.get(f'option{i}', '')
+            self.widgets[f'option{i}'].insert(0, option_value)
+        
+        # Populate correct answer dropdown
+        self.update_correct_answer_options()
+        correct_answer = self.question.get('correctAnswer', '')
+        if correct_answer:
+            self.widgets['correctAnswer'].set(correct_answer)
+        
+        # Bind subject change to update dependent dropdowns
+        self.widgets['subject'].bind('<<ComboboxSelected>>', self.on_subject_change)
+        
+        # Bind option changes to update correct answer dropdown
+        for i in range(1, 5):
+            self.widgets[f'option{i}'].bind('<KeyRelease>', self.update_correct_answer_dropdown)
+    
+    def on_subject_change(self, event=None):
+        """Update topics and classifications when subject changes"""
+        subject = self.widgets['subject'].get()
+        if subject:
+            # Update topics
+            topics = self.app.config_manager.get_topics_for_subject(subject)
+            self.widgets['topic']['values'] = topics
+            
+            # Update classifications
+            classifications = self.app.config_manager.get_classifications_for_subject(subject)
+            self.widgets['classification']['values'] = classifications
+    
     def update_correct_answer_options(self):
         """Update correct answer dropdown options"""
-        self.widgets['correctAnswer']['values'] = [
-            self.question.get('option1', ''),
-            self.question.get('option2', ''),
-            self.question.get('option3', ''),
-            self.question.get('option4', '')
-        ]
+        options = []
+        for i in range(1, 5):
+            option_value = self.question.get(f'option{i}', '')
+            if option_value:
+                options.append(option_value)
+        
+        self.widgets['correctAnswer']['values'] = options
+    
+    def update_correct_answer_dropdown(self, event=None):
+        """Update correct answer dropdown when options change"""
+        current_correct = self.widgets['correctAnswer'].get()
+        options = []
+        
+        for i in range(1, 5):
+            option_value = self.widgets[f'option{i}'].get()
+            if option_value:
+                options.append(option_value)
+        
+        self.widgets['correctAnswer']['values'] = options
+        
+        # Keep current selection if it's still valid
+        if current_correct in options:
+            self.widgets['correctAnswer'].set(current_correct)
     
     def save_changes(self):
         """Save changes to the question"""

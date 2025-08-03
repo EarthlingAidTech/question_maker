@@ -489,11 +489,17 @@ class MCQDatabaseManager:
             if not self.is_admin:
                 self.admin_tab.request_password()
     
+
     def on_closing(self):
         """Handle window closing event"""
+        # Stop admin tab refresh if it exists
+        if hasattr(self, 'admin_tab'):
+            self.admin_tab.cleanup()
+        
         # Update user activity log
-        if self.user_manager.collection:
+        if hasattr(self, 'user_manager') and self.user_manager.collection:
             duration = datetime.datetime.now() - self.session_start
             self.user_manager.log_session(self.username, self.session_start, duration)
         
+        # Destroy the window
         self.root.destroy()

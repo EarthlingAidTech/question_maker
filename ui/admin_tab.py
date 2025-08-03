@@ -13,6 +13,7 @@ class AdminTab(BaseTab):
     def __init__(self, parent, app):
         super().__init__(parent, app)
         self.is_authenticated = False
+        self.refresh_task_id = None
         self.setup()
     
     def setup(self):
@@ -323,13 +324,22 @@ Total Questions Created by Users: {total_questions}"""
             self.refresh_data()
         
         # Schedule next refresh (30 seconds)
-        self.admin_panel.after(30000, self.schedule_refresh)
+        self.refresh_task_id = self.admin_panel.after(30000, self.schedule_refresh)
     
     def request_password(self):
         """Request password when admin tab is clicked"""
         if not self.is_authenticated:
             self.admin_password_entry.delete(0, tk.END)
             self.admin_password_entry.focus()
+    
+    def cleanup(self):
+        """Cleanup method for proper shutdown"""
+        # Cancel any scheduled refreshes
+        if hasattr(self, 'refresh_task_id'):
+            try:
+                self.admin_panel.after_cancel(self.refresh_task_id)
+            except:
+                pass
 
 
 class UserDetailsDialog:
