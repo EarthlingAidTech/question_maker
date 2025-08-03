@@ -12,6 +12,9 @@ class BaseTab:
         self.app = app
         self.frame = tk.Frame(parent, bg=app.colors['bg'])
         
+        # CRITICAL FIX: Actually display the frame!
+        self.frame.pack(fill=tk.BOTH, expand=True)
+        
         # Configure grid for responsiveness
         self.frame.grid_rowconfigure(0, weight=1)
         self.frame.grid_columnconfigure(0, weight=1)

@@ -5,9 +5,11 @@ Main application class for MCQ Database Manager
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pyperclip
+import datetime
 
 from config.config_manager import ConfigManager
 from database.db_manager import DatabaseManager
+from database.user_manager import UserManager
 from utils.constants import COLORS, WINDOW_BREAK_POINT, QUESTIONS_PER_PAGE_DEFAULT, QUESTIONS_PER_PAGE_SMALL
 from utils.helpers import safe_grab_set
 
@@ -17,6 +19,8 @@ from ui.generator_tab import GeneratorTab
 from ui.processor_tab import ProcessorTab
 from ui.browse_tab import BrowseTab
 from ui.manage_tab import ManageTab
+from ui.profile_tab import ProfileTab
+from ui.admin_tab import AdminTab
 
 
 class MCQDatabaseManager:
@@ -40,10 +44,12 @@ class MCQDatabaseManager:
         
         # Username variable
         self.username = None
+        self.is_admin = False
         
         # Initialize managers
         self.config_manager = ConfigManager()
         self.db_manager = DatabaseManager()
+        self.user_manager = UserManager()
         
         # Current questions for display
         self.current_questions = []
@@ -66,9 +72,18 @@ class MCQDatabaseManager:
         
         # Bind tab change event
         self.notebook.bind('<<NotebookTabChanged>>', self.on_tab_changed)
+        
+        # Track user activity
+        self.session_start = datetime.datetime.now()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
     
     def ask_username(self):
         """Ask for username at startup"""
+        # Check if username is saved
+        if self.config_manager.saved_username:
+            self.username = self.config_manager.saved_username
+            return
+        
         username_dialog = tk.Toplevel(self.root)
         username_dialog.title("Welcome")
         username_dialog.geometry("400x200")
@@ -111,10 +126,6 @@ class MCQDatabaseManager:
         
         username_entry = tk.Entry(input_frame, font=('Arial', 11), width=30)
         username_entry.pack(pady=5)
-        
-        # Load last username if exists
-        if self.config_manager.saved_username:
-            username_entry.insert(0, self.config_manager.saved_username)
         
         def proceed():
             username = username_entry.get().strip()
@@ -252,12 +263,21 @@ class MCQDatabaseManager:
                 success, message = self.db_manager.connect(password)
                 
                 if success:
+                    # Connect user manager to same database
+                    self.user_manager.connect(password)
+                    
                     # Save password if requested
                     if remember_var.get():
                         self.config_manager.saved_password = self.config_manager.encrypt_password(password)
                     else:
                         self.config_manager.saved_password = None
                     self.config_manager.save_config()
+                    
+                    # Create/update user record
+                    self.user_manager.create_or_update_user(self.username)
+                    
+                    # Update user label with correct username
+                    self.user_label.config(text=f"👤 User: {self.username}")
                     
                     self.update_status(f"✓ Connected to MongoDB successfully (User: {self.username})", self.colors['success'])
                     password_dialog.destroy()
@@ -332,6 +352,8 @@ class MCQDatabaseManager:
         self.processor_frame = tk.Frame(self.notebook, bg=self.colors['bg'])
         self.browse_frame = tk.Frame(self.notebook, bg=self.colors['bg'])
         self.manage_frame = tk.Frame(self.notebook, bg=self.colors['bg'])
+        self.profile_frame = tk.Frame(self.notebook, bg=self.colors['bg'])
+        self.admin_frame = tk.Frame(self.notebook, bg=self.colors['bg'])
         
         # Add tabs to notebook
         self.notebook.add(self.dashboard_frame, text="📊 Dashboard")
@@ -339,6 +361,8 @@ class MCQDatabaseManager:
         self.notebook.add(self.processor_frame, text="📥 Import Questions")
         self.notebook.add(self.browse_frame, text="📚 Browse & Edit")
         self.notebook.add(self.manage_frame, text="⚙️ Manage")
+        self.notebook.add(self.profile_frame, text="👤 Profile")
+        self.notebook.add(self.admin_frame, text="🔒 Admin")
         
         # Status bar
         self.status_bar = tk.Label(
@@ -399,6 +423,8 @@ class MCQDatabaseManager:
         self.processor_tab = ProcessorTab(self.processor_frame, self)
         self.browse_tab = BrowseTab(self.browse_frame, self)
         self.manage_tab = ManageTab(self.manage_frame, self)
+        self.profile_tab = ProfileTab(self.profile_frame, self)
+        self.admin_tab = AdminTab(self.admin_frame, self)
     
     def update_status(self, message, color=None):
         """Update status bar"""
@@ -458,3 +484,16 @@ class MCQDatabaseManager:
             if not hasattr(self.browse_tab, 'data_loaded'):
                 self.browse_tab.apply_filters()
                 self.browse_tab.data_loaded = True
+        elif selected_tab == "🔒 Admin" and hasattr(self, 'admin_tab'):
+            # Admin tab requires password
+            if not self.is_admin:
+                self.admin_tab.request_password()
+    
+    def on_closing(self):
+        """Handle window closing event"""
+        # Update user activity log
+        if self.user_manager.collection:
+            duration = datetime.datetime.now() - self.session_start
+            self.user_manager.log_session(self.username, self.session_start, duration)
+        
+        self.root.destroy()

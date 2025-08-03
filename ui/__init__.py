@@ -4,3 +4,5 @@ from .generator_tab import GeneratorTab
 from .processor_tab import ProcessorTab
 from .browse_tab import BrowseTab
 from .manage_tab import ManageTab
+from .profile_tab import ProfileTab
+from .admin_tab import AdminTab
